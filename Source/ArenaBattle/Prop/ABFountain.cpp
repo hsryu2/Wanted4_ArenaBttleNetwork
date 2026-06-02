@@ -6,6 +6,8 @@
 #include "Net/UnrealNetwork.h"
 #include "ArenaBattle.h"
 
+#include "Components/PointLightComponent.h"
+
 // Sets default values
 AABFountain::AABFountain()
 {
@@ -34,6 +36,16 @@ AABFountain::AABFountain()
 	// 리플리케이션 활성화.
 	bReplicates = true;
 
+	// 네트워크 전송 빈도 설정
+	SetNetUpdateFrequency(1.0f);
+
+	// 거리 기반 연관성 판정에 사용할 거리 값 (제곱 값).
+	SetNetCullDistanceSquared(4000000.0f);
+
+	// 휴면 상태 설정
+	// 프로퍼티 리플리케이션의 경우에는 DORM_Initial 값만 사용 가능.
+	// 리플리케이션을 안하는 설정임. 따라서 서버에서는 돌아가나, 클라에서는 안됨.
+	NetDormancy = DORM_Initial;
 }
 
 // Called when the game starts or when spawned
@@ -41,20 +53,48 @@ void AABFountain::BeginPlay()
 {
 	Super::BeginPlay();
 
-	//// 서버 로직.
-	//if (HasAuthority())
-	//{
-	//	FTimerHandle Handle;
-	//	GetWorld()->GetTimerManager().SetTimer(
-	//		Handle,
-	//		FTimerDelegate::CreateLambda(
-	//			[&]() {
-	//				//ServerRotationYaw = 10.0f;
-	//				ServerRotationYaw += 1.0f;
-	//			}
-	//		), 1.0f, true
-	//	);
-	//}
+	// 서버 로직.
+	if (HasAuthority())
+	{
+		FTimerHandle Handle;
+		GetWorld()->GetTimerManager().SetTimer(
+			Handle,
+			FTimerDelegate::CreateLambda(
+				[&]() {
+					
+					// 큰 데이터 설정. ( 400 바이트 크기 ).
+					//BigData.Init(BigDataElement, 1000);
+
+					// 지속적인 전속을 위한 데이터 변경.
+					// 같은 값이 계속 넘어가면 엔진에서 누락시킬 수 있는데,
+					// 값을 바꿔가면서 전송하면 위와 같은 문제를 해소해줌.
+					//BigDataElement += 1.0f;
+
+					// 색상 값 변경.
+					ServerLightColor = FLinearColor(
+						FMath::FRandRange(0.0f, 1.0f),
+						FMath::FRandRange(0.0f, 1.0f),
+						FMath::FRandRange(0.0f, 1.0f)
+					);
+
+					// OnRep_ 함수는 서버에서 호출되지 않기 때문에 명시적으로 호출.
+					OnRep_ServerLightColor();
+				}
+			), 1.0f, true
+		);
+
+		// 두 번째 타이머 - 휴면 상태를 깨우기 위함.
+		FTimerHandle Handle2;
+		GetWorld()->GetTimerManager().SetTimer(
+			Handle2,
+			FTimerDelegate::CreateLambda([&]()
+				{
+					// 10초 경과 후 휴면 상태에서 깨우기.
+					FlushNetDormancy();
+				}
+			), 10.0f, false
+		);
+	}
 }
 
 void AABFountain::GetLifetimeReplicatedProps(
@@ -64,6 +104,9 @@ void AABFountain::GetLifetimeReplicatedProps(
 
 	// 리플리케이션(복제)할 속성을 매크로를 통해서 지정.
 	DOREPLIFETIME(AABFountain, ServerRotationYaw);
+
+	// 데이터 전송 테스트를 위한 변수를 리플리케이션에 등록.
+	//DOREPLIFETIME(AABFountain, BigData);
 }
 
 void AABFountain::OnActorChannelOpen(
@@ -75,6 +118,29 @@ void AABFountain::OnActorChannelOpen(
 	Super::OnActorChannelOpen(InBunch, Connection);
 
 	AB_LOG(LogABNetwork, Log, TEXT("%s"), TEXT("End"));
+}
+
+bool AABFountain::IsNetRelevantFor(
+	const AActor* RealViewer,
+	const AActor* ViewTarget,
+	const FVector& SrcLocation) const
+{
+	bool NetRelevantResult
+		= Super::IsNetRelevantFor(RealViewer, ViewTarget, SrcLocation);
+
+	// 연관성이 없다고 판단된 경우에는 뷰어의 위치 출력.
+	if (!NetRelevantResult)
+	{
+		AB_LOG(
+			LogABNetwork,
+			Log,
+			TEXT("Not Relevant: [%s] %s"),
+			*RealViewer->GetName(),
+			*SrcLocation.ToString()
+		);
+	}
+
+	return NetRelevantResult;
 }
 
 void AABFountain::OnRep_ServerRotationYaw()
@@ -93,6 +159,33 @@ void AABFountain::OnRep_ServerRotationYaw()
 
 	// 서버로부터 데이터를 받으면 0으로 초기화.
 	ClientTimeSinceUpdate = 0.0f;
+
+
+}
+
+void AABFountain::OnRep_ServerLightColor()
+{
+	// 클라이언트인 경우 전달 받은 값 출력.
+	if (!HasAuthority())
+	{
+		AB_LOG(
+			LogABNetwork,
+			Log,
+			TEXT("ServerLightColor: %s"),
+			*ServerLightColor.ToString()
+		);
+	}
+
+	// 서버-클라이언트 모두에서 실행.
+	// 컴포넌트 검색 - BP에서 추가한 컴포넌트 가져오기.
+	UPointLightComponent* PointLight = GetComponentByClass<UPointLightComponent>();
+	
+	if (PointLight)
+	{
+		// 서버에서 전달 받은 색상을 라이트 색상으로 설정.
+		PointLight->SetLightColor(ServerLightColor);
+	}
+	
 }
 
 // Called every frame
@@ -147,7 +240,7 @@ void AABFountain::Tick(float DeltaTime)
 
 		RootComponent->SetWorldRotation(ClientRotator);
 
-		//// 서버에서 전달된 값 출력.
+		// 서버에서 전달된 값 출력.
 		//AB_LOG(
 		//	LogABNetwork, 
 		//	Log, 
@@ -155,11 +248,11 @@ void AABFountain::Tick(float DeltaTime)
 		//	ServerRotationYaw
 		//);
 
-		//// 서버에서 전달 받은 회전 값을 설정할 회전 값 생성.
-		//FRotator NewRotator = RootComponent->GetComponentRotation();
-		//NewRotator.Yaw = ServerRotationYaw;
+		// 서버에서 전달 받은 회전 값을 설정할 회전 값 생성.
+		FRotator NewRotator = RootComponent->GetComponentRotation();
+		NewRotator.Yaw = ServerRotationYaw;
 
-		//// 회전 값 설정.
-		//RootComponent->SetWorldRotation(NewRotator);
+		// 회전 값 설정.
+		RootComponent->SetWorldRotation(NewRotator);
 	}
 }
