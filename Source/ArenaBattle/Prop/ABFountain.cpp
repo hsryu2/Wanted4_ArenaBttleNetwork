@@ -45,7 +45,7 @@ AABFountain::AABFountain()
 	// 휴면 상태 설정
 	// 프로퍼티 리플리케이션의 경우에는 DORM_Initial 값만 사용 가능.
 	// 리플리케이션을 안하는 설정임. 따라서 서버에서는 돌아가나, 클라에서는 안됨.
-	NetDormancy = DORM_Initial;
+	//NetDormancy = DORM_Initial;
 }
 
 // Called when the game starts or when spawned
@@ -71,14 +71,23 @@ void AABFountain::BeginPlay()
 					//BigDataElement += 1.0f;
 
 					// 색상 값 변경.
-					ServerLightColor = FLinearColor(
+					//ServerLightColor = FLinearColor(
+					//	FMath::FRandRange(0.0f, 1.0f),
+					//	FMath::FRandRange(0.0f, 1.0f),
+					//	FMath::FRandRange(0.0f, 1.0f)
+					//);
+
+					// OnRep_ 함수는 서버에서 호출되지 않기 때문에 명시적으로 호출.
+					//OnRep_ServerLightColor();
+
+					const FLinearColor NewLightColor = FLinearColor(
 						FMath::FRandRange(0.0f, 1.0f),
 						FMath::FRandRange(0.0f, 1.0f),
 						FMath::FRandRange(0.0f, 1.0f)
 					);
 
-					// OnRep_ 함수는 서버에서 호출되지 않기 때문에 명시적으로 호출.
-					OnRep_ServerLightColor();
+					// 멀티캐스트 RPC 호출.
+					MulticastRPCChangeLightColor(NewLightColor);
 				}
 			), 1.0f, true
 		);
@@ -90,7 +99,7 @@ void AABFountain::BeginPlay()
 			FTimerDelegate::CreateLambda([&]()
 				{
 					// 10초 경과 후 휴면 상태에서 깨우기.
-					FlushNetDormancy();
+					//FlushNetDormancy();
 				}
 			), 10.0f, false
 		);
@@ -107,6 +116,8 @@ void AABFountain::GetLifetimeReplicatedProps(
 
 	// 데이터 전송 테스트를 위한 변수를 리플리케이션에 등록.
 	//DOREPLIFETIME(AABFountain, BigData);
+	DOREPLIFETIME(AABFountain, ServerLightColor);
+	//DOREPLIFETIME_CONDITION(AABFountain, ServerLightColor, COND_InitialOnly);
 }
 
 void AABFountain::OnActorChannelOpen(
@@ -141,6 +152,12 @@ bool AABFountain::IsNetRelevantFor(
 	}
 
 	return NetRelevantResult;
+}
+
+void AABFountain::PreReplication(IRepChangedPropertyTracker& ChangedPropertyTracker)
+{
+	AB_LOG(LogABNetwork, Log, TEXT("%s"), TEXT("Begin"));
+	Super::PreReplication(ChangedPropertyTracker);
 }
 
 void AABFountain::OnRep_ServerRotationYaw()
@@ -186,6 +203,23 @@ void AABFountain::OnRep_ServerLightColor()
 		PointLight->SetLightColor(ServerLightColor);
 	}
 	
+}
+
+void AABFountain::MulticastRPCChangeLightColor_Implementation(const FLinearColor& NewLightColor)
+{
+	AB_LOG(
+		LogABNetwork,
+		Log,
+		TEXT("LightColor : %s"),
+		*NewLightColor.ToString()
+	);
+
+	// 컴포넌트 검색 후 라이트 색상 설정.
+	UPointLightComponent* PointLight = GetComponentByClass<UPointLightComponent>();
+	if (PointLight)
+	{
+		PointLight->SetLightColor(NewLightColor);
+	}
 }
 
 // Called every frame

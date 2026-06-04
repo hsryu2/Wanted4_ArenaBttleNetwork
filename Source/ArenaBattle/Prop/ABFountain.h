@@ -30,6 +30,10 @@ protected:
 	// 연관성 검사 함수
 	virtual bool IsNetRelevantFor(const AActor* RealViewer, const AActor* ViewTarget, const FVector& SrcLocation) const;
 
+	// 리플리케이션이 처리되기 바로 직전에 호출되는 함수
+	// 서버에서만 호출됨.
+	virtual void PreReplication(IRepChangedPropertyTracker& ChangedPropertyTracker);
+
 	// 속성이 변경됐을 때 호출될 함수 지정.
 	UFUNCTION()
 	void OnRep_ServerRotationYaw();
@@ -56,6 +60,10 @@ protected:
 	//float BigDataElement = 0.0f;
 	UFUNCTION()
 	void OnRep_ServerLightColor();
+
+	// 멀티캐스트 RPC 함수.
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastRPCChangeLightColor(const FLinearColor& NewLightColor);
 
 	// 라이트 색상 속성. ( 휴면 상태 테스트 )
 	UPROPERTY(ReplicatedUsing = OnRep_ServerLightColor)
