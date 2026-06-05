@@ -8,6 +8,8 @@
 
 #include "Components/PointLightComponent.h"
 
+#include "EngineUtils.h"
+
 // Sets default values
 AABFountain::AABFountain()
 {
@@ -36,15 +38,16 @@ AABFountain::AABFountain()
 	// 리플리케이션 활성화.
 	bReplicates = true;
 
-	// 네트워크 전송 빈도 설정
+	// 네트워크 전송 빈도 설정 ( 1초에 1번으로 )
+	//NetUpdateFrequency = 1.0f;
 	SetNetUpdateFrequency(1.0f);
 
-	// 거리 기반 연관성 판정에 사용할 거리 값 (제곱 값).
+	// 거리 기반 연관성 판정에 사용할 거리 값 (제곱 값: 20미터).
+	//NetCullDistanceSquared = 4000000.0f;
 	SetNetCullDistanceSquared(4000000.0f);
 
-	// 휴면 상태 설정
+	// 휴면 상태 설정.
 	// 프로퍼티 리플리케이션의 경우에는 DORM_Initial 값만 사용 가능.
-	// 리플리케이션을 안하는 설정임. 따라서 서버에서는 돌아가나, 클라에서는 안됨.
 	//NetDormancy = DORM_Initial;
 }
 
@@ -56,53 +59,156 @@ void AABFountain::BeginPlay()
 	// 서버 로직.
 	if (HasAuthority())
 	{
-		FTimerHandle Handle;
-		GetWorld()->GetTimerManager().SetTimer(
-			Handle,
-			FTimerDelegate::CreateLambda(
-				[&]() {
-					
-					// 큰 데이터 설정. ( 400 바이트 크기 ).
-					//BigData.Init(BigDataElement, 1000);
+		//FTimerHandle Handle;
+		//GetWorld()->GetTimerManager().SetTimer(
+		//	Handle,
+		//	FTimerDelegate::CreateLambda(
+		//		[&]() {
 
-					// 지속적인 전속을 위한 데이터 변경.
-					// 같은 값이 계속 넘어가면 엔진에서 누락시킬 수 있는데,
-					// 값을 바꿔가면서 전송하면 위와 같은 문제를 해소해줌.
-					//BigDataElement += 1.0f;
+		//			// 큰 데이터 설정 ( 400 바이트 크기 ).
+		//			//BigData.Init(BigDataElement, 1000);
 
-					// 색상 값 변경.
-					//ServerLightColor = FLinearColor(
-					//	FMath::FRandRange(0.0f, 1.0f),
-					//	FMath::FRandRange(0.0f, 1.0f),
-					//	FMath::FRandRange(0.0f, 1.0f)
-					//);
+		//			// 지속적인 전속을 위한 데이터 변경.
+		//			//BigDataElement += 1.0f;
 
-					// OnRep_ 함수는 서버에서 호출되지 않기 때문에 명시적으로 호출.
-					//OnRep_ServerLightColor();
+		//			// 색상 값 변경.
+		//			//ServerLightColor = FLinearColor(
+		//			//	FMath::RandRange(0.0f, 1.0f),
+		//			//	FMath::RandRange(0.0f, 1.0f),
+		//			//	FMath::RandRange(0.0f, 1.0f),
+		//			//	1.0f
+		//			//);
 
-					const FLinearColor NewLightColor = FLinearColor(
-						FMath::FRandRange(0.0f, 1.0f),
-						FMath::FRandRange(0.0f, 1.0f),
-						FMath::FRandRange(0.0f, 1.0f)
-					);
+		//			// OnRep_ 함수는 서버에서 호출되지 않기 때문에 명시적으로 호출.
+		//			//OnRep_ServerLightColor();
 
-					// 멀티캐스트 RPC 호출.
-					MulticastRPCChangeLightColor(NewLightColor);
-				}
-			), 1.0f, true
-		);
+		//			const FLinearColor NewLightColor = FLinearColor(
+		//				FMath::RandRange(0.0f, 1.0f),
+		//				FMath::RandRange(0.0f, 1.0f),
+		//				FMath::RandRange(0.0f, 1.0f),
+		//				1.0f
+		//			);
 
-		// 두 번째 타이머 - 휴면 상태를 깨우기 위함.
-		FTimerHandle Handle2;
-		GetWorld()->GetTimerManager().SetTimer(
-			Handle2,
-			FTimerDelegate::CreateLambda([&]()
-				{
-					// 10초 경과 후 휴면 상태에서 깨우기.
-					//FlushNetDormancy();
-				}
-			), 10.0f, false
-		);
+		//			// 클라이언트 RPC 호출.
+		//			ClientRPCChangeLightColor(NewLightColor);
+
+		//			//// 멀티캐스트 RPC 호출.
+		//			//MulticastRPCChangeLightColor(NewLightColor);
+		//		}
+		//	), 1.0f, true
+		//);
+
+
+		//// 두 번째 타이머 - 휴면 상태를 깨우기 위함.
+		//FTimerHandle Handle2;
+		//GetWorld()->GetTimerManager().SetTimer(
+		//	Handle2,
+		//	FTimerDelegate::CreateLambda([&]()
+		//		{
+		//			// 10초 경과 후에 휴면 상태 깨우기.
+		//			//FlushNetDormancy();
+
+		//			// 루프 순회 방법.
+		//			// 3가지.
+		//			// 인덱스 기반.
+		//			// 이터레이터 기반.
+		//			// 범위 기반 루프 range-based-loop.
+		//			// - for (auto item : array) { }
+
+		//			// 플레이어 컨트롤러를 순회해서 클라이언트의
+		//			// 플레이어 컨트롤러를 오너로 설정.
+		//			//for (auto Iterator
+		//			//	= GetWorld()->GetPlayerControllerIterator();
+		//			//	Iterator;
+		//			//	++Iterator)
+		//			//{
+		//			//	// 플레이어 컨트롤러 가져오기.
+		//			//	APlayerController* PlayerController = Iterator->Get();
+
+		//			//	// 클라이언트의 PC인지 확인.
+		//			//	// 서버 입장에서 IsLocalPlayerController()가 true라면,
+		//			//	// 리슨 서버에 있는 플레이어 컨트롤러이기 때문에
+		//			//	// 이 값이 false여야 클라이언트라는 게 확인됨.
+		//			//	if (PlayerController
+		//			//		&& !PlayerController->IsLocalPlayerController())
+		//			//	{
+		//			//		// 첫 번째 플레이어 컨트롤러를 오너로 설정.
+		//			//		SetOwner(PlayerController);
+		//			//		break;
+		//			//	}
+		//			//}
+
+		//			// 범위 기반 루프를 활용해 순회.
+		//			for (auto PlayerController 
+		//				: TActorRange<APlayerController>(GetWorld()))
+		//			{
+		//				// 서버에 있는 플레이어 컨트롤러가 아닌
+		//				// 첫 플레이어 컨트롤러를 오너로 설정.
+		//				if (PlayerController
+		//					&& !PlayerController->IsLocalPlayerController())
+		//				{
+		//					SetOwner(PlayerController);
+		//					break;
+		//				}
+		//			}
+
+		//		}
+		//	), 10.0f, false
+		//);
+
+		//FTimerHandle Handle3;
+		//GetWorld()->GetTimerManager().SetTimer(
+		//	Handle3,
+		//	FTimerDelegate::CreateLambda(
+		//		[&]()
+		//		{
+		//			// 리플리케이션 등록된 속성 변경 ( 라이트 색상 값 ).
+		//			//ServerLightColor = FLinearColor(
+		//			//	FMath::RandRange(0.0f, 1.0f),
+		//			//	FMath::RandRange(0.0f, 1.0f),
+		//			//	FMath::RandRange(0.0f, 1.0f),
+		//			//	1.0f
+		//			//);
+
+		//			// OnRep_은 클라이언트에서만 호출되기 때문에 명시적으로 호출.
+		//			//OnRep_ServerLightColor();
+
+		//			const FLinearColor NewLightColor
+		//				= FLinearColor(
+		//					FMath::RandRange(0.0f, 1.0f),
+		//					FMath::RandRange(0.0f, 1.0f),
+		//					FMath::RandRange(0.0f, 1.0f),
+		//					1.0f
+		//				);
+
+		//			// 멀티캐스트 RPC 호출.
+		//			MulticastRPCChangeLightColor(NewLightColor);
+
+		//		}
+		//	), 5.0f, false
+		//);
+
+	}
+
+	// 클라이언트 로직.
+	else
+	{
+		// 오너십 설정.
+		// 이 분수대 액터의 소유권을 클라이언트로 설정.
+		//SetOwner(GetWorld()->GetFirstPlayerController());
+
+		//// 타이머 활용해서 서버 RPC 호출.
+		//FTimerHandle Handle;
+		//GetWorld()->GetTimerManager().SetTimer(
+		//	Handle,
+		//	FTimerDelegate::CreateLambda(
+		//		[&]()
+		//		{
+		//			// 서버 RPC 호출.
+		//			ServerRPCChangeLightColor();
+		//		}
+		//	), 1.0f, true
+		//);
 	}
 }
 
@@ -120,54 +226,56 @@ void AABFountain::GetLifetimeReplicatedProps(
 	//DOREPLIFETIME_CONDITION(AABFountain, ServerLightColor, COND_InitialOnly);
 }
 
-void AABFountain::OnActorChannelOpen(
-	FInBunch& InBunch,
-	UNetConnection* Connection)
-{
-	AB_LOG(LogABNetwork, Log, TEXT("%s"), TEXT("Begin"));
+//void AABFountain::OnActorChannelOpen(
+//	FInBunch& InBunch,
+//	UNetConnection* Connection)
+//{
+//	AB_LOG(LogABNetwork, Log, TEXT("%s"), TEXT("Begin"));
+//
+//	Super::OnActorChannelOpen(InBunch, Connection);
+//
+//	AB_LOG(LogABNetwork, Log, TEXT("%s"), TEXT("End"));
+//}
 
-	Super::OnActorChannelOpen(InBunch, Connection);
+//bool AABFountain::IsNetRelevantFor(
+//	const AActor* RealViewer,
+//	const AActor* ViewTarget,
+//	const FVector& SrcLocation) const
+//{
+//	bool NetRelevantResult
+//		= Super::IsNetRelevantFor(RealViewer, ViewTarget, SrcLocation);
+//
+//	// 연관성이 없다고 판단된 경우에는 뷰어의 위치 출력.
+//	if (!NetRelevantResult)
+//	{
+//		AB_LOG(
+//			LogABNetwork,
+//			Log,
+//			TEXT("Not Relevant: [%s] %s"),
+//			*RealViewer->GetName(),
+//			*SrcLocation.ToString()
+//		);
+//	}
+//
+//	return NetRelevantResult;
+//}
 
-	AB_LOG(LogABNetwork, Log, TEXT("%s"), TEXT("End"));
-}
-
-bool AABFountain::IsNetRelevantFor(
-	const AActor* RealViewer,
-	const AActor* ViewTarget,
-	const FVector& SrcLocation) const
-{
-	bool NetRelevantResult
-		= Super::IsNetRelevantFor(RealViewer, ViewTarget, SrcLocation);
-
-	// 연관성이 없다고 판단된 경우에는 뷰어의 위치 출력.
-	if (!NetRelevantResult)
-	{
-		AB_LOG(
-			LogABNetwork,
-			Log,
-			TEXT("Not Relevant: [%s] %s"),
-			*RealViewer->GetName(),
-			*SrcLocation.ToString()
-		);
-	}
-
-	return NetRelevantResult;
-}
-
-void AABFountain::PreReplication(IRepChangedPropertyTracker& ChangedPropertyTracker)
-{
-	AB_LOG(LogABNetwork, Log, TEXT("%s"), TEXT("Begin"));
-	Super::PreReplication(ChangedPropertyTracker);
-}
+//void AABFountain::PreReplication(
+//	IRepChangedPropertyTracker& ChangedPropertyTracker)
+//{
+//	AB_LOG(LogABNetwork, Log, TEXT("%s"), TEXT("Begin"));
+//
+//	Super::PreReplication(ChangedPropertyTracker);
+//}
 
 void AABFountain::OnRep_ServerRotationYaw()
 {
-	AB_LOG(LogABNetwork, Log, TEXT("Yaw: %f"), ServerRotationYaw);
+	//AB_LOG(LogABNetwork, Log, TEXT("Yaw: %f"), ServerRotationYaw);
 
 	// 서버에서 전달 받은 회전 값을 설정할 회전 값 생성.
 	FRotator NewRotator = RootComponent->GetComponentRotation();
 	NewRotator.Yaw = ServerRotationYaw;
-	
+
 	// 회전 값 설정.
 	RootComponent->SetWorldRotation(NewRotator);
 
@@ -176,8 +284,6 @@ void AABFountain::OnRep_ServerRotationYaw()
 
 	// 서버로부터 데이터를 받으면 0으로 초기화.
 	ClientTimeSinceUpdate = 0.0f;
-
-
 }
 
 void AABFountain::OnRep_ServerLightColor()
@@ -195,27 +301,70 @@ void AABFountain::OnRep_ServerLightColor()
 
 	// 서버-클라이언트 모두에서 실행.
 	// 컴포넌트 검색 - BP에서 추가한 컴포넌트 가져오기.
-	UPointLightComponent* PointLight = GetComponentByClass<UPointLightComponent>();
-	
+	UPointLightComponent* PointLight
+		= GetComponentByClass<UPointLightComponent>();
 	if (PointLight)
 	{
 		// 서버에서 전달 받은 색상을 라이트 색상으로 설정.
 		PointLight->SetLightColor(ServerLightColor);
 	}
-	
 }
 
-void AABFountain::MulticastRPCChangeLightColor_Implementation(const FLinearColor& NewLightColor)
+void AABFountain::ClientRPCChangeLightColor_Implementation(
+	const FLinearColor& NewLightColor)
 {
 	AB_LOG(
 		LogABNetwork,
 		Log,
-		TEXT("LightColor : %s"),
+		TEXT("LightColor: %s"),
 		*NewLightColor.ToString()
 	);
 
 	// 컴포넌트 검색 후 라이트 색상 설정.
-	UPointLightComponent* PointLight = GetComponentByClass<UPointLightComponent>();
+	UPointLightComponent* PointLight
+		= GetComponentByClass<UPointLightComponent>();
+	if (PointLight)
+	{
+		PointLight->SetLightColor(NewLightColor);
+	}
+}
+
+bool AABFountain::ServerRPCChangeLightColor_Validate()
+{
+	return true;
+}
+
+void AABFountain::ServerRPCChangeLightColor_Implementation()
+{
+	// 서버 RPC를 클라이언트에서 호출하면,
+	// 서버에서 이 함수가 호출됨. Client -> Server.
+	// 이를 인지한 서버에서는 랜덤으로 색상을 만들고,
+	// 자신을 포함해 모든 클라이언트에게 새로 만든 색상을 
+	// 멀티캐스트 RPC를 통해 전달.
+	const FLinearColor NewLightColor = FLinearColor(
+		FMath::RandRange(0.0f, 1.0f),
+		FMath::RandRange(0.0f, 1.0f),
+		FMath::RandRange(0.0f, 1.0f),
+		1.0f
+	);
+
+	// 멀티캐스트 RPC 호출.
+	MulticastRPCChangeLightColor(NewLightColor);
+}
+
+void AABFountain::MulticastRPCChangeLightColor_Implementation(
+	const FLinearColor& NewLightColor)
+{
+	AB_LOG(
+		LogABNetwork,
+		Log,
+		TEXT("LightColor: %s"),
+		*NewLightColor.ToString()
+	);
+
+	// 컴포넌트 검색 후 라이트 색상 설정.
+	UPointLightComponent* PointLight
+		= GetComponentByClass<UPointLightComponent>();
 	if (PointLight)
 	{
 		PointLight->SetLightColor(NewLightColor);
@@ -237,7 +386,7 @@ void AABFountain::Tick(float DeltaTime)
 		AddActorLocalRotation(
 			FRotator(0.0f, RotationRate * DeltaTime, 0.0f)
 		);
-		
+
 		// 변경된 회전 값을 프로퍼티에 저장.
 		ServerRotationYaw = RootComponent->GetComponentRotation().Yaw;
 	}
@@ -248,7 +397,7 @@ void AABFountain::Tick(float DeltaTime)
 		// 서버로부터 데이터를 받은 후에 경과한 시간 계산.
 		ClientTimeSinceUpdate += DeltaTime;
 
-		// 보간처리
+		// 보간처리.
 
 		// 너무 작은 시간이 경과했을 때는 의미가 없음.
 		if (ClientTimeSinceUpdate < KINDA_SMALL_NUMBER)
@@ -257,10 +406,10 @@ void AABFountain::Tick(float DeltaTime)
 		}
 
 		// 다음 네트워크 패킷 전송 때 전달될 회전 값 예측.
-		const float EstimateRotationYaw = 
-			ServerRotationYaw + RotationRate * ClientTimeSinceUpdate;
+		const float EstimateRotationYaw
+			= ServerRotationYaw + RotationRate * ClientTimeBetweenLastUpdate;
 
-		// 보간할 비율(alpha) 계산.
+		// 보간할 비율(alpha) 구하기.
 		const float LerpRatio
 			= ClientTimeSinceUpdate / ClientTimeBetweenLastUpdate;
 
@@ -274,7 +423,7 @@ void AABFountain::Tick(float DeltaTime)
 
 		RootComponent->SetWorldRotation(ClientRotator);
 
-		// 서버에서 전달된 값 출력.
+		//// 서버에서 전달된 값 출력.
 		//AB_LOG(
 		//	LogABNetwork, 
 		//	Log, 
@@ -282,11 +431,11 @@ void AABFountain::Tick(float DeltaTime)
 		//	ServerRotationYaw
 		//);
 
-		// 서버에서 전달 받은 회전 값을 설정할 회전 값 생성.
-		FRotator NewRotator = RootComponent->GetComponentRotation();
-		NewRotator.Yaw = ServerRotationYaw;
+		//// 서버에서 전달 받은 회전 값을 설정할 회전 값 생성.
+		//FRotator NewRotator = RootComponent->GetComponentRotation();
+		//NewRotator.Yaw = ServerRotationYaw;
 
-		// 회전 값 설정.
-		RootComponent->SetWorldRotation(NewRotator);
+		//// 회전 값 설정.
+		//RootComponent->SetWorldRotation(NewRotator);
 	}
 }
